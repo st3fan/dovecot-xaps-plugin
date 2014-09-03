@@ -26,8 +26,10 @@ const char *xapplepushservice_plugin_version = DOVECOT_VERSION;
 static struct module *xapplepushservice_module;
 static imap_client_created_func_t *next_hook_client_created;
 
+
 /**
- * Send a registration request to the daemon.
+ * Send a registration request to the daemon, which will do all the
+ * hard work.
  */
 
 static int xaps_register(const char *aps_account_id, const char *aps_device_token, const char *aps_subtopic, const char *dovecot_username, const struct imap_arg *dovecot_mailboxes, string_t *aps_topic)
@@ -90,7 +92,7 @@ static int xaps_register(const char *aps_account_id, const char *aps_device_toke
 
   net_set_nonblock(fd, FALSE);
 
-  alarm(1);                     /* TODO: Should be a constant. What is a good duration? */
+  alarm(2);
   {
     if (net_transmit(fd, str_data(req), str_len(req)) < 0) {
       i_error("write(%s) failed: %m", socket_path);
@@ -101,7 +103,6 @@ static int xaps_register(const char *aps_account_id, const char *aps_device_toke
       if (ret < 0) {
         i_error("read(%s) failed: %m", socket_path);
       } else {
-        i_debug("we got a response: %s", res);
         if (strncmp(res, "OK ", 3) == 0 && strlen(res) > 6) {
           /* Remove whitespace the end. We expect \r\n. TODO: Looks shady. Is there a dovecot library function for this? */
           if (res[strlen(res)-2] == '\r') {
@@ -119,6 +120,7 @@ static int xaps_register(const char *aps_account_id, const char *aps_device_toke
 
   return ret;
 }
+
 
 /**
  * Command handler for the XAPPLEPUSHSERVICE command. The command is
@@ -147,8 +149,6 @@ static int xaps_register(const char *aps_account_id, const char *aps_device_toke
 
 static bool cmd_xapplepushservice(struct client_command_context *cmd)
 {
-  i_debug("cmd_xapplepushservice: %s %s %s", cmd->tag, cmd->name, cmd->args);
-
   /*
    * Parse arguments. We expect four key value pairs. We only take
    * those that we understand for version 2 of this extension.
@@ -247,13 +247,12 @@ static bool cmd_xapplepushservice(struct client_command_context *cmd)
    * client and the APS server and the IMAP server stays current.
    */
 
-  /* TODO: In case of aps-version 2, we should loop over the mailboxes provided */
+  struct client *client = cmd->client;
+  struct mail_user *user = client->user;
 
   string_t *aps_topic = t_str_new(0);
 
-  const char *username = "stefan"; // TODO: Take this from the current context?
-
-  if (xaps_register(aps_account_id, aps_device_token, aps_subtopic, username, mailboxes, aps_topic) != 0) {
+  if (xaps_register(aps_account_id, aps_device_token, aps_subtopic, user->username, mailboxes, aps_topic) != 0) {
     client_send_command_error(cmd, "Registration failed.");
     return FALSE;
   }
@@ -289,6 +288,7 @@ static void xapplepushservice_client_created(struct client **client)
   }
 }
 
+
 /**
  * This plugin method is called when the plugin is globally
  * initialized. We register a new command, XAPPLEPUSHSERVICE, and also
@@ -298,8 +298,6 @@ static void xapplepushservice_client_created(struct client **client)
 
 void imap_xaps_plugin_init(struct module *module)
 {
-  i_debug("imap_xaps_plugin_init");
-
   command_register("XAPPLEPUSHSERVICE", cmd_xapplepushservice, 0);
 
   xapplepushservice_module = module;
@@ -315,9 +313,6 @@ void imap_xaps_plugin_init(struct module *module)
 
 void imap_xaps_plugin_deinit(void)
 {
-  i_debug("imap_xaps_plugin_deinit");
-
-
   imap_client_created_hook_set(next_hook_client_created);
 
   command_unregister("XAPPLEPUSHSERVICE");
@@ -325,12 +320,11 @@ void imap_xaps_plugin_deinit(void)
 
 
 /**
- * Depend on the notify plugin. The Apple code uses a mail delivery
- * hook to trigger the sending of a notification, but I think that has
- * been deprecated.
+ * Depend on our other plugin, which loads into the lda and does the
+ * notification part.
  */
 
-//const char *imap_xaps_plugin_dependencies[] = { "xaps", NULL };
+const char *imap_xaps_plugin_dependencies[] = { "xaps", NULL };
 
 
 /**
