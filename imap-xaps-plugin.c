@@ -32,7 +32,7 @@ static imap_client_created_func_t *next_hook_client_created;
  * hard work.
  */
 
-static int xaps_register(const char *aps_account_id, const char *aps_device_token, const char *aps_subtopic, const char *dovecot_username, const struct imap_arg *dovecot_mailboxes, string_t *aps_topic)
+static int xaps_register(const char *socket_path, const char *aps_account_id, const char *aps_device_token, const char *aps_subtopic, const char *dovecot_username, const struct imap_arg *dovecot_mailboxes, string_t *aps_topic)
 {
   int ret = -1;
 
@@ -81,8 +81,6 @@ static int xaps_register(const char *aps_account_id, const char *aps_device_toke
    * protocol is very simple line based. We use an alarm to make sure
    * this request does not hang.
    */
-
-  const char *socket_path = "/tmp/xapsd.sock"; /* TODO: This needs to move to the configuration */
 
   int fd = net_connect_unix(socket_path);
   if (fd == -1) {
@@ -250,9 +248,14 @@ static bool cmd_xapplepushservice(struct client_command_context *cmd)
   struct client *client = cmd->client;
   struct mail_user *user = client->user;
 
+  const char *socket_path = mail_user_plugin_getenv(user, "xaps_socket");
+  if (socket_path == NULL) {
+    socket_path = "/var/run/dovecot/xapsd.sock";
+  }
+
   string_t *aps_topic = t_str_new(0);
 
-  if (xaps_register(aps_account_id, aps_device_token, aps_subtopic, user->username, mailboxes, aps_topic) != 0) {
+  if (xaps_register(socket_path, aps_account_id, aps_device_token, aps_subtopic, user->username, mailboxes, aps_topic) != 0) {
     client_send_command_error(cmd, "Registration failed.");
     return FALSE;
   }
