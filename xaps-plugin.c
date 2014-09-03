@@ -16,6 +16,11 @@
 #include <stdlib.h>
 
 
+#define XAPS_CONTEXT(obj) MODULE_CONTEXT(obj, xaps_storage_module)
+#define XAPS_MAIL_CONTEXT(obj) MDULE_CONTEXT(obj, xaps_mail_module)
+#define XAPS_USER_CONTEXT(obj) MODULE_CONTEXT(obj, xaps_user_module)
+
+
 #ifdef DOVECOT_ABI_VERSION
 const char *xaps_plugin_version = DOVECOT_ABI_VERSION;
 #else
@@ -24,8 +29,9 @@ const char *xaps_plugin_version = DOVECOT_VERSION;
 
 
 static MODULE_CONTEXT_DEFINE_INIT(xaps_storage_module, &mail_storage_module_register);
+//static MODULE_CONTEXT_DEFINE_INIT(xaps_user_module, &mail_user_module_register);
+//static MODULE_CONTEXT_DEFINE_INIT(xaps_mail_module, &mail_module_register);
 
-#define STORAGE_CONTEXT(obj) MODULE_CONTEXT(obj, xaps_storage_module)
 
 /**
  * Quote and escape a string. Not sure if this deals correctly with
@@ -103,38 +109,64 @@ static int xaps_notify(const char *socket_path, const char *username, const char
 
 struct xaps_mailbox {
   union mailbox_module_context module_ctx;
-  int messages_written_to_inbox;
+  int message_count;
 };
+
+
+static struct mailbox_transaction_context *xaps_transaction_begin(struct mailbox *box, enum mailbox_transaction_flags flags)
+{
+  i_debug("xaps_transaction_begin");
+
+  struct xaps_mailbox *xaps_mailbox = XAPS_CONTEXT(box);
+  xaps_mailbox->message_count = 0;
+
+  union mailbox_module_context *zbox = XAPS_CONTEXT(box);
+  return zbox->super.transaction_begin(box, flags);
+}
 
 
 static int xaps_save_finish(struct mail_save_context *ctx)
 {
+  i_debug("xaps_save_finish");
+
   struct mailbox_transaction_context *t = ctx->transaction;
-  struct xaps_mailbox *asmb = STORAGE_CONTEXT(t->box);
-  struct mail *mail = ctx->dest_mail;
+  struct xaps_mailbox *xaps_mailbox = XAPS_CONTEXT(t->box);
 
-  /*
-   * TODO: Right now for testing we send the notification here. But I
-   * think we should really record all the mailboxes touched in this
-   * transaction and then send a single notification with an array of
-   * mailboxes with new emails.
-   */
-
-  struct mail_user *user = mail->box->storage->user;
-
-  const char *socket_path = mail_user_plugin_getenv(user, "xaps_socket");
-  if (socket_path == NULL) {
-    socket_path = "/var/run/dovecot/xapsd.sock";
+  int ret = xaps_mailbox->module_ctx.super.save_finish(ctx);
+  if (ret == 0) {
+    xaps_mailbox->message_count++;
   }
 
-  int ret = asmb->module_ctx.super.save_finish(ctx);
-  if (ret == 0) {
-    if (xaps_notify(socket_path, user->username, mailbox_get_name(mail->box)) != 0) {
+  return ret;
+}
+
+
+static int xaps_transaction_commit(struct mailbox_transaction_context *t, struct mail_transaction_commit_changes *changes_r)
+{
+  i_debug("xaps_transaction_commit");
+
+  /*
+   * If the message count in this transaction is not zero then we have
+   * written new messages to the inbox. Call the notifier.
+   */
+
+  struct xaps_mailbox *xaps_mailbox = XAPS_CONTEXT(t->box);
+  if (xaps_mailbox->message_count != 0) {
+    const char *socket_path = mail_user_plugin_getenv(t->box->storage->user, "xaps_socket");
+    if (socket_path == NULL) {
+      socket_path = "/var/run/dovecot/xapsd.sock";
+    }
+    if (xaps_notify(socket_path, t->box->storage->user->username, t->box->name) != 0) {
       i_error("cannot notify");
     }
   }
 
-  return ret;
+  /*
+   * Call the original transaction_commit()
+   */
+
+  union mailbox_module_context *zbox = XAPS_CONTEXT(t->box);
+  return zbox->super.transaction_commit(t, changes_r);
 }
 
 static void xaps_mailbox_allocated(struct mailbox *box)
@@ -145,7 +177,9 @@ static void xaps_mailbox_allocated(struct mailbox *box)
 
   struct xaps_mailbox *asmb = p_new(box->pool, struct xaps_mailbox, 1);
   asmb->module_ctx.super = box->v;
+  box->v.transaction_begin = xaps_transaction_begin;
   box->v.save_finish = xaps_save_finish;
+  box->v.transaction_commit = xaps_transaction_commit;
 
   MODULE_CONTEXT_SET(box, xaps_storage_module, asmb);
 }
@@ -158,10 +192,12 @@ static struct mail_storage_hooks xaps_mail_storage_hooks = {
 
 void xaps_plugin_init(struct module *module)
 {
+  i_debug("xaps_plugin_init");
   mail_storage_hooks_add(module, &xaps_mail_storage_hooks);
 }
 
 void xaps_plugin_deinit(void)
 {
+  i_debug("xaps_plugin_deinit");
   mail_storage_hooks_remove(&xaps_mail_storage_hooks);
 }
