@@ -4,6 +4,7 @@
 #include "lib.h"
 #include "network.h"
 #include "str.h"
+#include "strescape.h"
 #include "mail-storage.h"
 #include "mail-storage-private.h"
 #include "mail-user.h"
@@ -26,30 +27,46 @@ static MODULE_CONTEXT_DEFINE_INIT(xaps_storage_module, &mail_storage_module_regi
 
 #define STORAGE_CONTEXT(obj) MODULE_CONTEXT(obj, xaps_storage_module)
 
-static int xaps_notify(const char *username, const char *mailbox)
+/**
+ * Quote and escape a string. Not sure if this deals correctly with
+ * unicode in mailbox names.
+ */
+
+static void xaps_str_append_quoted(string_t *dest, const char *str)
+{
+  str_append_c(dest, '"');
+  str_append(dest, str_escape(str));
+  str_append_c(dest, '"');
+}
+
+/**
+ * Notify the backend daemon of an incoming mail. Right now we tell
+ * the daemon the username and the mailbox in which a new email was
+ * posted. The daemon can then lookup the user and see if any of the
+ * devices want to receive a notification for that mailbox.
+ */
+
+static int xaps_notify(const char *socket_path, const char *username, const char *mailbox)
 {
   int ret = -1;
 
   /*
-   * Construct the request. Not sure yet if we also need to send the
-   * mailbox name. Maybe the ping is just a global 'hey go check mail'
+   * Construct the request.
    */
 
   string_t *req = t_str_new(1024);
   str_append(req, "NOTIFY");
-  str_append(req, " dovecot-username=\"");
-  str_append(req, username);
-  str_append(req, "\" dovecot-mailbox=\"");
-  str_append(req, mailbox);
-  str_append(req, "\"\r\n");
+  str_append(req, " dovecot-username=");
+  xaps_str_append_quoted(req, username);
+  str_append(req, " dovecot-mailbox=");
+  xaps_str_append_quoted(req, mailbox);
+  str_append(req, "\r\n");
 
   /*
    * Send the request to our daemon over a unix domain socket. The
    * protocol is very simple line based. We use an alarm to make sure
    * this request does not hang.
    */
-
-  const char *socket_path = "/tmp/xapsd.sock"; /* TODO: This needs to move to the configuration */
 
   int fd = net_connect_unix(socket_path);
   if (fd == -1) {
@@ -70,15 +87,9 @@ static int xaps_notify(const char *username, const char *mailbox)
       if (ret < 0) {
         i_error("read(%s) failed: %m", socket_path);
       } else {
-        i_debug("we got a response: %s", res);
-        /* if (strncmp(res, "OK ", 3) == 0 && strlen(res) > 6) { */
-        /*   /\* Remove whitespace the end. We expect \r\n. TODO: Looks shady. Is there a dovecot library function for this? *\/ */
-        /*   if (res[strlen(res)-2] == '\r') { */
-        /*     res[strlen(res)-2] = 0x00; */
-        /*   } */
-        /*   str_append(aps_topic, &res[3]); */
-        /*   ret = 0; */
-        /* } */
+        if (strncmp(res, "OK ", 3) == 0) {
+          ret = 0;
+        }
       }
     }
   }
@@ -89,34 +100,12 @@ static int xaps_notify(const char *username, const char *mailbox)
   return ret;
 }
 
-/* static void xaps_mail_save(void *txn, struct mail *mail) */
-/* { */
-/*   i_error("mail_save callback"); */
-/*   if (xaps_notify() != 0) { */
-/*     i_error("cannot notify"); */
-/*   } */
-/* } */
-
-
-/* static const struct notify_vfuncs xaps_notify_vfuncs = { */
-/*   .mail_save = xaps_mail_save, */
-/* }; */
-
-/* static struct notify_context *xaps_notify_ctx; */
-
-
-/* void foo() { */
-/*   exit(123); */
-/*   i_debug("mail_allocated"); */
-/*   if (xaps_notify() != 0) { */
-/*     i_error("cannot notify"); */
-/*   } */
-/* } */
 
 struct xaps_mailbox {
   union mailbox_module_context module_ctx;
   int messages_written_to_inbox;
 };
+
 
 static int xaps_save_finish(struct mail_save_context *ctx)
 {
@@ -131,9 +120,16 @@ static int xaps_save_finish(struct mail_save_context *ctx)
    * mailboxes with new emails.
    */
 
+  struct mail_user *user = mail->box->storage->user;
+
+  const char *socket_path = mail_user_plugin_getenv(user, "xaps_socket");
+  if (socket_path == NULL) {
+    socket_path = "/var/run/dovecot/xapsd.sock";
+  }
+
   int ret = asmb->module_ctx.super.save_finish(ctx);
   if (ret == 0) {
-    if (xaps_notify(mail->box->storage->user->username, mailbox_get_name(mail->box)) != 0) {
+    if (xaps_notify(socket_path, user->username, mailbox_get_name(mail->box)) != 0) {
       i_error("cannot notify");
     }
   }
@@ -143,25 +139,13 @@ static int xaps_save_finish(struct mail_save_context *ctx)
 
 static void xaps_mailbox_allocated(struct mailbox *box)
 {
-  struct xaps_mailbox *asmb;
-
-#if 0
-  if (USER_CONTEXT(box->storage->user) == NULL) {
+  if (box->storage->user == NULL) {
     return;
   }
-#endif
 
-  asmb = p_new(box->pool, struct xaps_mailbox, 1);
+  struct xaps_mailbox *asmb = p_new(box->pool, struct xaps_mailbox, 1);
   asmb->module_ctx.super = box->v;
-
-  //asmb->box_class = xaps_mailbox_classify(box);
-
-  //box->v.copy = antispam_copy;
-  //box->v.save_begin = antispam_save_begin;
   box->v.save_finish = xaps_save_finish;
-  //box->v.transaction_begin = antispam_transaction_begin;
-  //box->v.transaction_commit = antispam_transaction_commit;
-  //box->v.transaction_rollback = antispam_transaction_rollback;
 
   MODULE_CONTEXT_SET(box, xaps_storage_module, asmb);
 }
@@ -172,26 +156,12 @@ static struct mail_storage_hooks xaps_mail_storage_hooks = {
 };
 
 
-
-
-
-
 void xaps_plugin_init(struct module *module)
 {
-  i_info("xaps_plugin_init");
-  //xaps_notify_ctx = notify_register(&xaps_notify_vfuncs);
-
   mail_storage_hooks_add(module, &xaps_mail_storage_hooks);
-
 }
 
 void xaps_plugin_deinit(void)
 {
-  i_info("xaps_plugin_deinit");
-  //notify_unregister(xaps_notify_ctx);
-
   mail_storage_hooks_remove(&xaps_mail_storage_hooks);
 }
-
-
-const char *xapplepushservice_plugin_dependencies[] = { "notify", NULL };
