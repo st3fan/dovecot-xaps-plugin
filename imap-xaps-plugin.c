@@ -23,7 +23,7 @@ const char *xapplepushservice_plugin_version = DOVECOT_VERSION;
 #endif
 
 
-static struct module *xapplepushservice_module;
+static struct module *imap_xaps_module;
 static imap_client_created_func_t *next_hook_client_created;
 
 
@@ -277,11 +277,11 @@ static bool cmd_xapplepushservice(struct client_command_context *cmd)
  * XAPPLEPUSHSERVICE command by iOS clients.
  */
 
-static void xapplepushservice_client_created(struct client **client)
+static void xaps_client_created(struct client **client)
 {
-  //if (mail_user_is_plugin_loaded((*client)->user, xapplepushservice_module)) {
+  if (mail_user_is_plugin_loaded((*client)->user, imap_xaps_module)) {
     str_append((*client)->capability_string, " XAPPLEPUSHSERVICE");
-    //}
+  }
 
   if (next_hook_client_created != NULL) {
     next_hook_client_created(client);
@@ -300,8 +300,8 @@ void imap_xaps_plugin_init(struct module *module)
 {
   command_register("XAPPLEPUSHSERVICE", cmd_xapplepushservice, 0);
 
-  xapplepushservice_module = module;
-  next_hook_client_created = imap_client_created_hook_set(xapplepushservice_client_created);
+  imap_xaps_module = module;
+  next_hook_client_created = imap_client_created_hook_set(xaps_client_created);
 }
 
 
@@ -317,14 +317,6 @@ void imap_xaps_plugin_deinit(void)
 
   command_unregister("XAPPLEPUSHSERVICE");
 }
-
-
-/**
- * Depend on our other plugin, which loads into the lda and does the
- * notification part.
- */
-
-const char *imap_xaps_plugin_dependencies[] = { "xaps", NULL };
 
 
 /**

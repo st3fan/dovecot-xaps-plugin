@@ -3,7 +3,6 @@
 
 struct module;
 
-extern const char *imap_xaps_plugin_dependencies[];
 extern const char imap_xaps_plugin_binary_dependency[];
 
 void imap_xaps_plugin_init(struct module *module);
