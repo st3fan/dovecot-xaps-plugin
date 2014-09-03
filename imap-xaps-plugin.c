@@ -4,12 +4,12 @@
 #include "lib.h"
 #include "network.h"
 #include "str.h"
+#include "strescape.h"
 #include "imap-common.h"
 #include "imap-commands.h"
 #include "mail-storage-private.h"
 #include "mail-namespace.h"
 #include "mailbox-list-private.h"
-//#include "notify-plugin.h"
 
 #include "imap-xaps-plugin.h"
 
@@ -28,6 +28,19 @@ static imap_client_created_func_t *next_hook_client_created;
 
 
 /**
+ * Quote and escape a string. Not sure if this deals correctly with
+ * unicode in mailbox names.
+ */
+
+static void xaps_str_append_quoted(string_t *dest, const char *str)
+{
+  str_append_c(dest, '"');
+  str_append(dest, str_escape(str));
+  str_append_c(dest, '"');
+}
+
+
+/**
  * Send a registration request to the daemon, which will do all the
  * hard work.
  */
@@ -37,22 +50,20 @@ static int xaps_register(const char *socket_path, const char *aps_account_id, co
   int ret = -1;
 
   /*
-   * Construct our request. TODO: The values need to be properly
-   * escaped in a way compatible with Python's
-   * decode("escaped_string") works correctly.
+   * Construct our request.
    */
 
   string_t *req = t_str_new(1024);
   str_append(req, "REGISTER");
-  str_append(req, " aps-account-id=\"");
-  str_append(req, aps_account_id);
-  str_append(req, "\" aps-device-token=\"");
-  str_append(req, aps_device_token);
-  str_append(req, "\" aps-subtopic=\"");
-  str_append(req, aps_subtopic);
-  str_append(req, "\" dovecot-username=\"");
-  str_append(req, dovecot_username);
-  str_append(req, "\"");
+  str_append(req, " aps-account-id=");
+  xaps_str_append_quoted(req, aps_account_id);
+  str_append(req, " aps-device-token=");
+  xaps_str_append_quoted(req, aps_device_token);
+  str_append(req, " aps-subtopic=");
+  xaps_str_append_quoted(req, aps_subtopic);
+  str_append(req, " dovecot-username=");
+  xaps_str_append_quoted(req, dovecot_username);
+  str_append(req, "");
 
   if (dovecot_mailboxes == NULL) {
     str_append(req, " dovecot-mailboxes=(\"INBOX\")");
@@ -67,9 +78,7 @@ static int xaps_register(const char *socket_path, const char *aps_account_id, co
       if (next) {
         str_append(req, ",");
       }
-      str_append(req, "\"");
-      str_append(req, mailbox);
-      str_append(req, "\"");
+      xaps_str_append_quoted(req, mailbox);
       next = 1;
     }
     str_append(req, ")");
