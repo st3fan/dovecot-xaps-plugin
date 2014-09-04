@@ -79,18 +79,18 @@ static int xaps_register(const char *socket_path, const char *aps_account_id, co
   str_append(req, "REGISTER");
   str_append(req, " aps-account-id=");
   xaps_str_append_quoted(req, aps_account_id);
-  str_append(req, " aps-device-token=");
+  str_append(req, "\taps-device-token=");
   xaps_str_append_quoted(req, aps_device_token);
-  str_append(req, " aps-subtopic=");
+  str_append(req, "\taps-subtopic=");
   xaps_str_append_quoted(req, aps_subtopic);
-  str_append(req, " dovecot-username=");
+  str_append(req, "\tdovecot-username=");
   xaps_str_append_quoted(req, dovecot_username);
   str_append(req, "");
 
   if (dovecot_mailboxes == NULL) {
-    str_append(req, " dovecot-mailboxes=(\"INBOX\")");
+    str_append(req, "\tdovecot-mailboxes=(\"INBOX\")");
   } else {
-    str_append(req, " dovecot-mailboxes=(");
+    str_append(req, "\tdovecot-mailboxes=(");
     int next = 0;
     for (; !IMAP_ARG_IS_EOL(dovecot_mailboxes); dovecot_mailboxes++) {
       const char *mailbox;

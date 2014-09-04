@@ -86,7 +86,7 @@ static int xaps_notify(const char *socket_path, const char *username, const char
   str_append(req, "NOTIFY");
   str_append(req, " dovecot-username=");
   xaps_str_append_quoted(req, username);
-  str_append(req, " dovecot-mailbox=");
+  str_append(req, "\tdovecot-mailbox=");
   xaps_str_append_quoted(req, mailbox);
   str_append(req, "\r\n");
 
