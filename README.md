@@ -4,7 +4,7 @@ iOS Push Email for Dovecot
 What is this?
 -------------
 
-This project, together with the [dovecot-xaps-plugin](https://github.com/st3fan/dovecot-xaps-plugin) project, will enable push email for iOS devices that talk to your Dovecot 2.0.x IMAP server. This is specially useful for people who are migrating away from running email services on OS X Server and want to keep the Push Email ability.
+This project, together with the [dovecot-xaps-daemon](https://github.com/st3fan/dovecot-xaps-daemon) project, will enable push email for iOS devices that talk to your Dovecot 2.0.x IMAP server. This is specially useful for people who are migrating away from running email services on OS X Server and want to keep the Push Email ability.
 
 > Please note that it is not possible to use this project without legally owning a copy of OS X Server. You can purchase OS X Server on the [Mac App Store](https://itunes.apple.com/ca/app/os-x-server/id714547929?mt=12) or download it for free if you are a registered Mac or iOS developer.
 
