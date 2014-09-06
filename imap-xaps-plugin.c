@@ -22,9 +22,13 @@
  * THE SOFTWARE.
  */
 
-
+#include "config.h"
 #include "lib.h"
+#if (DOVECOT_VERSION_MAJOR >= 2u) && (DOVECOT_VERSION_MINOR >= 2u)
 #include "net.h"
+#else
+#include "network.h"
+#endif
 #include "str.h"
 #include "strescape.h"
 #include "imap-common.h"
