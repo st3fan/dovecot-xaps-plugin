@@ -128,16 +128,15 @@ static int xaps_register(const char *socket_path, const char *aps_account_id, co
       ret = -1;
     } else {
       char res[1024];
-      ret = net_receive(fd, res, sizeof(res));
+      ret = net_receive(fd, res, sizeof(res)-1);
       if (ret < 0) {
         i_error("read(%s) failed: %m", socket_path);
       } else {
-        if (strncmp(res, "OK ", 3) == 0 && strlen(res) > 6) {
+        res[ret] = '\0';
+        if (strncmp(res, "OK ", 3) == 0) {
+          char *tmp;
           /* Remove whitespace the end. We expect \r\n. TODO: Looks shady. Is there a dovecot library function for this? */
-          if (res[strlen(res)-2] == '\r') {
-            res[strlen(res)-2] = 0x00;
-          }
-          str_append(aps_topic, &res[3]);
+          str_append(aps_topic, strtok_r(&res[3], "\r\n", &tmp));
           ret = 0;
         }
       }

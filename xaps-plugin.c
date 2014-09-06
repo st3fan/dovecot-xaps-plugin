@@ -111,10 +111,11 @@ static int xaps_notify(const char *socket_path, const char *username, const char
       ret = -1;
     } else {
       char res[1024];
-      ret = net_receive(fd, res, sizeof(res));
+      ret = net_receive(fd, res, sizeof(res)-1);
       if (ret < 0) {
         i_error("read(%s) failed: %m", socket_path);
       } else {
+        res[ret] = '\0';
         if (strncmp(res, "OK ", 3) == 0) {
           ret = 0;
         }
