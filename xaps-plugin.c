@@ -22,9 +22,13 @@
  * THE SOFTWARE.
  */
 
-
+#include "config.h"
 #include "lib.h"
+#if (DOVECOT_VERSION_MAJOR >= 2u) && (DOVECOT_VERSION_MINOR >= 2u)
+#include "net.h"
+#else
 #include "network.h"
+#endif
 #include "str.h"
 #include "strescape.h"
 #include "mail-storage.h"
@@ -111,10 +115,11 @@ static int xaps_notify(const char *socket_path, const char *username, const char
       ret = -1;
     } else {
       char res[1024];
-      ret = net_receive(fd, res, sizeof(res));
+      ret = net_receive(fd, res, sizeof(res)-1);
       if (ret < 0) {
         i_error("read(%s) failed: %m", socket_path);
       } else {
+        res[ret] = '\0';
         if (strncmp(res, "OK ", 3) == 0) {
           ret = 0;
         }
