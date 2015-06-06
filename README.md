@@ -17,7 +17,7 @@ First you need to install the Dovecot plugins from this project. The Dovecot plu
 
 (Apple did not document this feature, but it did publish the source code for all their Dovecot patches on the [Apple Open Source project site](http://www.opensource.apple.com/source/dovecot/dovecot-293/), which include this feature. So although I was not able to follow a specification, I was able to read their open source project and do a clean implementation with all original code.)
 
-Second, you need to install a daemon process, from the [dovecot-xaps-plugin](https://github.com/st3fan/dovecot-xaps-daemon) project, that will be responsible for receiving new email notifications from the Dovecot Local Delivery Agent and transforming those into native Apple Push Notifications.
+Second, you need to install a daemon process, from the [dovecot-xaps-plugin](https://github.com/st3fan/dovecot-xaps-daemon) project, that will be responsible for receiving new email notifications from the Dovecot Local Delivery Agent or from the Dovecot LMTP server and transforming those into native Apple Push Notifications.
 
 Installation
 ============
@@ -31,7 +31,7 @@ You are going to need the following things to get this going:
 * Because you will need a certificate to talk to the Apple Push Notifications Service, you can only run this software if you are migrating away from an existing OS X Server setup where you had Push Email enabled. How to export the certificate is described in the [dovecot-xaps-daemon project](https://github.com/st3fan/dovecot-xaps-daemon).
 * This software has only been tested on Ubuntu 12.04.5 with Dovecot 2.0.19. So ideally you have a mail server with the same specifications, or something very similar.
 
-> Note that you need to have an existing Dovecot setup working. Either with local system users or with virtual users. Also note that you need to be using the Dovecot Local Delivery Agent for this to work. The Dovecot LDA is described in detail on the [Dovecot Wiki](http://wiki2.dovecot.org/LDA) 
+> Note that you need to have an existing Dovecot setup working. Either with local system users or with virtual users. Also note that you need to be using the Dovecot Local Delivery Agent or the Dovecot LMTP server for this to work. The [Dovecot LDA](http://wiki2.dovecot.org/LDA) and the [LMTP server](http://wiki2.dovecot.org/LMTP) are described in detail on the Dovecot Wiki
 
 Installing the Dovecot plugins
 ------------------------------
