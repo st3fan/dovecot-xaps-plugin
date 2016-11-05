@@ -127,6 +127,7 @@ static int xaps_register(const char *socket_path, const char *aps_account_id, co
 
   alarm(2);
   {
+    errno = 0;
     if (net_transmit(fd, str_data(req), str_len(req)) < 0) {
       i_error("write(%s) failed: %m", socket_path);
       ret = -1;
