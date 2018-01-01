@@ -3,7 +3,7 @@ project(dovecot-xaps-plugin)
 
 include_directories(/usr/include/dovecot)
 set(CMAKE_C_STANDARD 99)
-set(CMAKE_C_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_library(xaps_plugin SHARED xaps-plugin.c)
