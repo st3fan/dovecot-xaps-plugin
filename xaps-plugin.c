@@ -23,8 +23,10 @@
  * THE SOFTWARE.
  */
 
-#include "config.h"
-#include "lib.h"
+#include <config.h>
+#include <lib.h>
+#include <ostream.h>
+#include <ostream-unix.h>
 
 #if (DOVECOT_VERSION_MAJOR >= 2u) && (DOVECOT_VERSION_MINOR >= 2u)
 #include "net.h"
@@ -106,8 +108,11 @@ static int xaps_notify(const char *socket_path, const char *username, const char
     net_set_nonblock(fd, FALSE);
 
     alarm(1);                     /* TODO: Should be a constant. What is a good duration? */
+    struct ostream *ostream = o_stream_create_unix(fd, (size_t)-1);
+    o_stream_nsend(ostream, str_data(req), str_len(req));
+    o_stream_cork(ostream);
     {
-        if (net_transmit(fd, str_data(req), str_len(req)) < 0) {
+        if (o_stream_flush(ostream) < 1) {
             i_error("write(%s) failed: %m", socket_path);
             ret = -1;
         } else {
