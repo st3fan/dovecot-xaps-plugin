@@ -2,6 +2,7 @@
  * The MIT License (MIT)
  *
  * Copyright (c) 2014 Stefan Arentz <stefan@arentz.ca>
+ * Copyright (c) 2017 Frederik Schwan <frederik dot schwan at linux dot com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +31,7 @@ struct module;
 extern const char imap_xaps_plugin_binary_dependency[];
 
 void imap_xaps_plugin_init(struct module *module);
+
 void imap_xaps_plugin_deinit(void);
 
 #endif
