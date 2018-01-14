@@ -127,8 +127,9 @@ static int xaps_register(const char *socket_path, const char *aps_account_id, co
 
     alarm(2);
     struct ostream *ostream = o_stream_create_unix(fd, (size_t)-1);
-    o_stream_nsend(ostream, str_data(req), str_len(req));
     o_stream_cork(ostream);
+    o_stream_nsend(ostream, str_data(req), str_len(req));
+    o_stream_uncork(ostream);
     {
         if (o_stream_flush(ostream) < 1) {
             i_error("write(%s) failed: %m", socket_path);
@@ -149,6 +150,7 @@ static int xaps_register(const char *socket_path, const char *aps_account_id, co
             }
         }
     }
+    o_stream_destroy(&ostream);
     alarm(0);
 
     net_disconnect(fd);

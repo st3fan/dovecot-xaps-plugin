@@ -109,8 +109,9 @@ static int xaps_notify(const char *socket_path, const char *username, const char
 
     alarm(1);                     /* TODO: Should be a constant. What is a good duration? */
     struct ostream *ostream = o_stream_create_unix(fd, (size_t)-1);
-    o_stream_nsend(ostream, str_data(req), str_len(req));
     o_stream_cork(ostream);
+    o_stream_nsend(ostream, str_data(req), str_len(req));
+    o_stream_uncork(ostream);
     {
         if (o_stream_flush(ostream) < 1) {
             i_error("write(%s) failed: %m", socket_path);
@@ -128,6 +129,7 @@ static int xaps_notify(const char *socket_path, const char *username, const char
             }
         }
     }
+    o_stream_destroy(&ostream);
     alarm(0);
 
     net_disconnect(fd);
@@ -141,8 +143,18 @@ struct xaps_mailbox {
     int message_count;
 };
 
-
 static struct mailbox_transaction_context *
+#if (DOVECOT_VERSION_MINOR >= 3)
+xaps_transaction_begin(struct mailbox *box, enum mailbox_transaction_flags flags, const char *reason) {
+    i_debug("xaps_transaction_begin");
+
+    struct xaps_mailbox *xaps_mailbox = XAPS_CONTEXT(box);
+    xaps_mailbox->message_count = 0;
+
+    union mailbox_module_context *zbox = XAPS_CONTEXT(box);
+    return zbox->super.transaction_begin(box, flags, reason);
+}
+#else
 xaps_transaction_begin(struct mailbox *box, enum mailbox_transaction_flags flags) {
     i_debug("xaps_transaction_begin");
 
@@ -152,7 +164,7 @@ xaps_transaction_begin(struct mailbox *box, enum mailbox_transaction_flags flags
     union mailbox_module_context *zbox = XAPS_CONTEXT(box);
     return zbox->super.transaction_begin(box, flags);
 }
-
+#endif
 
 static int xaps_save_finish(struct mail_save_context *ctx) {
     i_debug("xaps_save_finish");
