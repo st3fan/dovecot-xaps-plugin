@@ -143,8 +143,18 @@ struct xaps_mailbox {
     int message_count;
 };
 
-
 static struct mailbox_transaction_context *
+#if (DOVECOT_VERSION_MINOR >= 3)
+xaps_transaction_begin(struct mailbox *box, enum mailbox_transaction_flags flags, const char *reason) {
+    i_debug("xaps_transaction_begin");
+
+    struct xaps_mailbox *xaps_mailbox = XAPS_CONTEXT(box);
+    xaps_mailbox->message_count = 0;
+
+    union mailbox_module_context *zbox = XAPS_CONTEXT(box);
+    return zbox->super.transaction_begin(box, flags, reason);
+}
+#else
 xaps_transaction_begin(struct mailbox *box, enum mailbox_transaction_flags flags) {
     i_debug("xaps_transaction_begin");
 
@@ -154,7 +164,7 @@ xaps_transaction_begin(struct mailbox *box, enum mailbox_transaction_flags flags
     union mailbox_module_context *zbox = XAPS_CONTEXT(box);
     return zbox->super.transaction_begin(box, flags);
 }
-
+#endif
 
 static int xaps_save_finish(struct mail_save_context *ctx) {
     i_debug("xaps_save_finish");
