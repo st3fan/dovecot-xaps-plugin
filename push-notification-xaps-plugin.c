@@ -27,38 +27,22 @@
 #include <lib.h>
 #include <ostream.h>
 #include <ostream-unix.h>
+#include <net.h>
+#include <push-notification-drivers.h>
+#include <push-notification-events.h>
+#include <push-notification-txn-msg.h>
+#include <push-notification-event-messagenew.h>
 
-#if (DOVECOT_VERSION_MAJOR >= 2u) && (DOVECOT_VERSION_MINOR >= 2u)
-#include "net.h"
-#else
-#include "network.h"
-#endif
+#include <str.h>
+#include <strescape.h>
+#include <mail-storage.h>
+#include <mail-storage-private.h>
 
-#include "str.h"
-#include "strescape.h"
-#include "mail-storage.h"
-#include "mail-storage-private.h"
-#include "notify-plugin.h"
+#include "push-notification-xaps-plugin.h"
 
-#include "xaps-plugin.h"
+#define XAPS_LOG_LABEL "XAPS Push Notification: "
 
-
-#define XAPS_CONTEXT(obj) MODULE_CONTEXT(obj, xaps_storage_module)
-#define XAPS_MAIL_CONTEXT(obj) MDULE_CONTEXT(obj, xaps_mail_module)
-#define XAPS_USER_CONTEXT(obj) MODULE_CONTEXT(obj, xaps_user_module)
-
-
-#ifdef DOVECOT_ABI_VERSION
 const char *xaps_plugin_version = DOVECOT_ABI_VERSION;
-#else
-const char *xaps_plugin_version = DOVECOT_VERSION;
-#endif
-
-
-static MODULE_CONTEXT_DEFINE_INIT(xaps_storage_module, &mail_storage_module_register);
-//static MODULE_CONTEXT_DEFINE_INIT(xaps_user_module, &mail_user_module_register);
-//static MODULE_CONTEXT_DEFINE_INIT(xaps_mail_module, &mail_module_register);
-
 
 /**
  * Quote and escape a string. Not sure if this deals correctly with
@@ -137,104 +121,87 @@ static int xaps_notify(const char *socket_path, const char *username, const char
     return ret;
 }
 
+static bool xaps_plugin_begin_txn(struct push_notification_driver_txn *dtxn) {
+    const struct push_notification_event *const *event;
+    struct push_notification_event_messagenew_config *config;
 
-struct xaps_mailbox {
-    union mailbox_module_context module_ctx;
-    int message_count;
-};
-
-static struct mailbox_transaction_context *
-#if (DOVECOT_VERSION_MINOR >= 3)
-xaps_transaction_begin(struct mailbox *box, enum mailbox_transaction_flags flags, const char *reason) {
-    i_debug("xaps_transaction_begin");
-
-    struct xaps_mailbox *xaps_mailbox = XAPS_CONTEXT(box);
-    xaps_mailbox->message_count = 0;
-
-    union mailbox_module_context *zbox = XAPS_CONTEXT(box);
-    return zbox->super.transaction_begin(box, flags, reason);
-}
-#else
-xaps_transaction_begin(struct mailbox *box, enum mailbox_transaction_flags flags) {
-    i_debug("xaps_transaction_begin");
-
-    struct xaps_mailbox *xaps_mailbox = XAPS_CONTEXT(box);
-    xaps_mailbox->message_count = 0;
-
-    union mailbox_module_context *zbox = XAPS_CONTEXT(box);
-    return zbox->super.transaction_begin(box, flags);
-}
-#endif
-
-static int xaps_save_finish(struct mail_save_context *ctx) {
-    i_debug("xaps_save_finish");
-
-    struct mailbox_transaction_context *t = ctx->transaction;
-    struct xaps_mailbox *xaps_mailbox = XAPS_CONTEXT(t->box);
-
-    int ret = xaps_mailbox->module_ctx.super.save_finish(ctx);
-    if (ret == 0) {
-        xaps_mailbox->message_count++;
+    // we have to initialize each event
+    // the MessageNew event needs a config to appear in the process_msg function
+    // so it's handled separately
+    array_foreach(&push_notification_events, event) {
+        if (strcmp((*event)->name,"MessageNew") == 0) {
+            config = p_new(dtxn->ptxn->pool, struct push_notification_event_messagenew_config, 1);
+            config->flags = PUSH_NOTIFICATION_MESSAGE_HDR_DATE |
+                            PUSH_NOTIFICATION_MESSAGE_HDR_FROM |
+                            PUSH_NOTIFICATION_MESSAGE_HDR_TO |
+                            PUSH_NOTIFICATION_MESSAGE_HDR_SUBJECT |
+                            PUSH_NOTIFICATION_MESSAGE_BODY_SNIPPET;
+            push_notification_event_init(dtxn, "MessageNew", config);
+            push_notification_driver_debug(XAPS_LOG_LABEL, dtxn->ptxn->muser,
+                                           "Handling MessageNew event");
+        } else {
+            push_notification_event_init(dtxn, (*event)->name, NULL);
+        }
     }
-
-    return ret;
+    return TRUE;
 }
 
+static void xaps_plugin_process_msg(struct push_notification_driver_txn *dtxn, struct push_notification_txn_msg *msg) {
+    struct push_notification_event_messagenew_data *messagenew;
+    struct push_notification_txn_event *const *event;
 
-static int
-xaps_transaction_commit(struct mailbox_transaction_context *t, struct mail_transaction_commit_changes *changes_r) {
-    i_debug("xaps_transaction_commit");
-
-    /*
-     * If the message count in this transaction is not zero then we have
-     * written new messages to the inbox. Call the notifier.
-     */
-
-    struct xaps_mailbox *xaps_mailbox = XAPS_CONTEXT(t->box);
-    if (xaps_mailbox->message_count != 0) {
-        const char *socket_path = mail_user_plugin_getenv(t->box->storage->user, "xaps_socket");
+    if (array_is_created(&msg->eventdata)) {
+        array_foreach(&msg->eventdata, event) {
+            i_debug((*event)->event->event->name);
+        }
+    }
+    
+    messagenew = push_notification_txn_msg_get_eventdata(msg, "MessageNew");
+    if (messagenew != NULL) {
+        i_debug("send");
+        const char *socket_path = mail_user_plugin_getenv(dtxn->ptxn->muser, "xaps_socket");
         if (socket_path == NULL) {
             socket_path = "/var/run/dovecot/xapsd.sock";
         }
-        if (xaps_notify(socket_path, t->box->storage->user->username, t->box->name) != 0) {
+        if (xaps_notify(socket_path, dtxn->ptxn->muser->username, dtxn->ptxn->mbox->name) != 0) {
             i_error("cannot notify");
         }
     }
-
-    /*
-     * Call the original transaction_commit()
-     */
-
-    union mailbox_module_context *zbox = XAPS_CONTEXT(t->box);
-    return zbox->super.transaction_commit(t, changes_r);
 }
 
-static void xaps_mailbox_allocated(struct mailbox *box) {
-    if (box->storage->user == NULL) {
-        return;
-    }
+// push plugin definition
 
-    struct xaps_mailbox *asmb = p_new(box->pool, struct xaps_mailbox, 1);
-    asmb->module_ctx.super = box->v;
-    box->v.transaction_begin = xaps_transaction_begin;
-    box->v.save_finish = xaps_save_finish;
-    box->v.transaction_commit = xaps_transaction_commit;
+const char *xaps_plugin_dependencies[] = { "push_notification", NULL };
 
-    MODULE_CONTEXT_SET(box, xaps_storage_module, asmb);
+extern struct push_notification_driver push_notification_driver_xaps;
+
+int xaps_plugin_init(struct push_notification_driver_config *module ATTR_UNUSED,
+                 struct mail_user *pUser ATTR_UNUSED,
+                 pool_t pPool ATTR_UNUSED,
+                 void **pVoid ATTR_UNUSED,
+                 const char **pString ATTR_UNUSED) {
+    return 0;
 }
 
+void xaps_plugin_deinit(struct push_notification_driver_user *duser ATTR_UNUSED) {
+}
 
-static struct mail_storage_hooks xaps_mail_storage_hooks = {
-        .mailbox_allocated = xaps_mailbox_allocated
+struct push_notification_driver push_notification_driver_xaps = {
+        .name = "xaps",
+        .v = {
+                .init = xaps_plugin_init,
+                .begin_txn = xaps_plugin_begin_txn,
+                .process_msg = xaps_plugin_process_msg,
+                .deinit = xaps_plugin_deinit,
+        }
 };
 
+// plugin init and deinit
 
-void xaps_plugin_init(struct module *module) {
-    i_debug("xaps_plugin_init");
-    mail_storage_hooks_add(module, &xaps_mail_storage_hooks);
+void push_notification_xaps_plugin_init(struct module *module ATTR_UNUSED) {
+    push_notification_driver_register(&push_notification_driver_xaps);
 }
 
-void xaps_plugin_deinit(void) {
-    i_debug("xaps_plugin_deinit");
-    mail_storage_hooks_remove(&xaps_mail_storage_hooks);
+void push_notification_xaps_plugin_deinit(void) {
+    push_notification_driver_unregister(&push_notification_driver_xaps);
 }
