@@ -30,8 +30,7 @@ struct module;
 
 extern const char *xaps_plugin_dependencies[];
 
-void xaps_plugin_init(struct module *module);
-
-void xaps_plugin_deinit(void);
+void push_notification_xaps_plugin_init(struct module *module);
+void push_notification_xaps_plugin_deinit(void);
 
 #endif

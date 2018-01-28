@@ -28,18 +28,10 @@
 #include <ostream.h>
 #include <ostream-unix.h>
 
-#if (DOVECOT_VERSION_MAJOR >= 2u) && (DOVECOT_VERSION_MINOR >= 2u)
-#include "net.h"
-#else
-#include "network.h"
-#endif
-
 #include "str.h"
 #include "strescape.h"
 #include "imap-common.h"
 #include "mail-storage-private.h"
-
-#include "imap-xaps-plugin.h"
 
 
 #ifdef DOVECOT_ABI_VERSION

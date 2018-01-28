@@ -29,7 +29,7 @@ You are going to need the following things to get this going:
 
 * Some patience and willingness to experiment - Although I run this project in production, it is still a very early version and it may contain bugs.
 * Because you will need a certificate to talk to the Apple Push Notifications Service, you can only run this software if you are migrating away from an existing OS X Server setup where you had Push Email enabled. How to export the certificate is described in the [dovecot-xaps-daemon project](https://github.com/st3fan/dovecot-xaps-daemon).
-* Dovecot > 2.2.11 (which fixed an EPIPE Bug) AND Dovecot < 2.3.0 (which has several changes in the mailbox_vfuncs signatures) 
+* Dovecot > 2.2.19 (which introduced the push-notification plugin) 
 
 > Note that you need to have an existing Dovecot setup working. Either with local system users or with virtual users. Also note that you need to be using the Dovecot Local Delivery Agent or the Dovecot LMTP server for this to work. The [Dovecot LDA](http://wiki2.dovecot.org/LDA) and the [LMTP server](http://wiki2.dovecot.org/LMTP) are described in detail on the Dovecot Wiki
 
@@ -40,7 +40,7 @@ First install the following Ubuntu 12.04.5 packages, or equivalent for your oper
 
 ```
 sudo apt-get build-dep dovecot-core
-sudo apt-get install git dovecot-dev
+sudo apt-get install git dovecot-dev cmake
 ```
 
 Clone this project:
@@ -53,7 +53,9 @@ cd dovecot-xaps-plugin
 Compile and install the plugins. Note that the installation destination in the `Makefile` is hardcoded for Ubuntu, it expects the Dovecot modules to live at `/usr/lib/dovecot/modules/`. You can either modify the `Makefile` or copy the modules to the right place manually.
 
 ```
-make
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
 sudo make install
 ```
 
