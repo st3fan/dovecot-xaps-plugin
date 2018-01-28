@@ -40,7 +40,7 @@ First install the following Ubuntu 12.04.5 packages, or equivalent for your oper
 
 ```
 sudo apt-get build-dep dovecot-core
-sudo apt-get install git dovecot-dev
+sudo apt-get install git dovecot-dev cmake
 ```
 
 Clone this project:
@@ -53,7 +53,9 @@ cd dovecot-xaps-plugin
 Compile and install the plugins. Note that the installation destination in the `Makefile` is hardcoded for Ubuntu, it expects the Dovecot modules to live at `/usr/lib/dovecot/modules/`. You can either modify the `Makefile` or copy the modules to the right place manually.
 
 ```
-make
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
 sudo make install
 ```
 
