@@ -123,6 +123,10 @@ static int xaps_notify(struct mail_user *mailuser, struct mailbox *mailbox) {
     return ret;
 }
 
+/*
+ * Prepare message handling.
+ * On return of false, the event gets dismissed for this driver
+ */
 static bool xaps_plugin_begin_txn(struct push_notification_driver_txn *dtxn) {
     const struct push_notification_event *const *event;
     struct push_notification_event_messagenew_config *config;
@@ -136,6 +140,7 @@ static bool xaps_plugin_begin_txn(struct push_notification_driver_txn *dtxn) {
     array_foreach(&push_notification_events, event) {
         if (strcmp((*event)->name,"MessageNew") == 0) {
             config = p_new(dtxn->ptxn->pool, struct push_notification_event_messagenew_config, 1);
+            // Take what you can, give nothing back
             config->flags = PUSH_NOTIFICATION_MESSAGE_HDR_DATE |
                             PUSH_NOTIFICATION_MESSAGE_HDR_FROM |
                             PUSH_NOTIFICATION_MESSAGE_HDR_TO |
@@ -149,6 +154,9 @@ static bool xaps_plugin_begin_txn(struct push_notification_driver_txn *dtxn) {
     return TRUE;
 }
 
+/*
+ * Process the actual message
+ */
 static void xaps_plugin_process_msg(struct push_notification_driver_txn *dtxn, struct push_notification_txn_msg *msg) {
     struct push_notification_event_messagenew_data *messagenew;
     struct push_notification_txn_event *const *event;
@@ -159,7 +167,8 @@ static void xaps_plugin_process_msg(struct push_notification_driver_txn *dtxn, s
                                            "Handling event: %s", (*event)->event->event->name);
         }
     }
-    
+
+    // for now we only handle new messages and no flags
     messagenew = push_notification_txn_msg_get_eventdata(msg, "MessageNew");
     if (messagenew != NULL) {
         if (xaps_notify(dtxn->ptxn->muser, dtxn->ptxn->mbox) != 0) {
@@ -168,7 +177,7 @@ static void xaps_plugin_process_msg(struct push_notification_driver_txn *dtxn, s
     }
 }
 
-// push plugin definition
+// push-notification driver definition
 
 const char *xaps_plugin_dependencies[] = { "push_notification", NULL };
 
