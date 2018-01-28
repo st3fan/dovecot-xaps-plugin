@@ -37,6 +37,7 @@
 #include <strescape.h>
 #include <mail-storage.h>
 #include <mail-storage-private.h>
+#include <push-notification-txn-mbox.h>
 
 #include "push-notification-xaps-plugin.h"
 
@@ -62,7 +63,7 @@ static void xaps_str_append_quoted(string_t *dest, const char *str) {
  * devices want to receive a notification for that mailbox.
  */
 
-static int xaps_notify(const char *socket_path, const char *username, const char *mailbox) {
+static int xaps_notify(const char *socket_path, struct mail_user *mailuser, struct mailbox *mailbox) {
     int ret = -1;
 
     /*
@@ -72,9 +73,9 @@ static int xaps_notify(const char *socket_path, const char *username, const char
     string_t *req = t_str_new(1024);
     str_append(req, "NOTIFY");
     str_append(req, " dovecot-username=");
-    xaps_str_append_quoted(req, username);
+    xaps_str_append_quoted(req, mailuser->username);
     str_append(req, "\tdovecot-mailbox=");
-    xaps_str_append_quoted(req, mailbox);
+    xaps_str_append_quoted(req, mailbox->name);
     str_append(req, "\r\n");
 
     /*
@@ -90,7 +91,7 @@ static int xaps_notify(const char *socket_path, const char *username, const char
     }
 
     net_set_nonblock(fd, FALSE);
-
+    push_notification_driver_debug(XAPS_LOG_LABEL, mailuser, "about to send: %p", req);
     alarm(1);                     /* TODO: Should be a constant. What is a good duration? */
     struct ostream *ostream = o_stream_create_unix(fd, (size_t)-1);
     o_stream_cork(ostream);
@@ -125,6 +126,9 @@ static bool xaps_plugin_begin_txn(struct push_notification_driver_txn *dtxn) {
     const struct push_notification_event *const *event;
     struct push_notification_event_messagenew_config *config;
 
+    push_notification_driver_debug(XAPS_LOG_LABEL, dtxn->ptxn->muser, "begin_txn: user: %s mailbox: %s",
+                                   dtxn->ptxn->muser->username, dtxn->ptxn->mbox->name);
+
     // we have to initialize each event
     // the MessageNew event needs a config to appear in the process_msg function
     // so it's handled separately
@@ -137,8 +141,6 @@ static bool xaps_plugin_begin_txn(struct push_notification_driver_txn *dtxn) {
                             PUSH_NOTIFICATION_MESSAGE_HDR_SUBJECT |
                             PUSH_NOTIFICATION_MESSAGE_BODY_SNIPPET;
             push_notification_event_init(dtxn, "MessageNew", config);
-            push_notification_driver_debug(XAPS_LOG_LABEL, dtxn->ptxn->muser,
-                                           "Handling MessageNew event");
         } else {
             push_notification_event_init(dtxn, (*event)->name, NULL);
         }
@@ -152,18 +154,18 @@ static void xaps_plugin_process_msg(struct push_notification_driver_txn *dtxn, s
 
     if (array_is_created(&msg->eventdata)) {
         array_foreach(&msg->eventdata, event) {
-            i_debug((*event)->event->event->name);
+            push_notification_driver_debug(XAPS_LOG_LABEL, dtxn->ptxn->muser,
+                                           "Handling event: %s", (*event)->event->event->name);
         }
     }
     
     messagenew = push_notification_txn_msg_get_eventdata(msg, "MessageNew");
     if (messagenew != NULL) {
-        i_debug("send");
         const char *socket_path = mail_user_plugin_getenv(dtxn->ptxn->muser, "xaps_socket");
         if (socket_path == NULL) {
             socket_path = "/var/run/dovecot/xapsd.sock";
         }
-        if (xaps_notify(socket_path, dtxn->ptxn->muser->username, dtxn->ptxn->mbox->name) != 0) {
+        if (xaps_notify(socket_path, dtxn->ptxn->muser, dtxn->ptxn->mbox) != 0) {
             i_error("cannot notify");
         }
     }
