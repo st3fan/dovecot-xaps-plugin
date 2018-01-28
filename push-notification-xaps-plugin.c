@@ -42,6 +42,7 @@
 #include "push-notification-xaps-plugin.h"
 
 #define XAPS_LOG_LABEL "XAPS Push Notification: "
+#define DEFAULT_SOCKPATH "/var/run/dovecot/xapsd.sock"
 
 const char *xaps_plugin_version = DOVECOT_ABI_VERSION;
 
@@ -63,7 +64,7 @@ static void xaps_str_append_quoted(string_t *dest, const char *str) {
  * devices want to receive a notification for that mailbox.
  */
 
-static int xaps_notify(const char *socket_path, struct mail_user *mailuser, struct mailbox *mailbox) {
+static int xaps_notify(struct mail_user *mailuser, struct mailbox *mailbox) {
     int ret = -1;
 
     /*
@@ -161,11 +162,7 @@ static void xaps_plugin_process_msg(struct push_notification_driver_txn *dtxn, s
     
     messagenew = push_notification_txn_msg_get_eventdata(msg, "MessageNew");
     if (messagenew != NULL) {
-        const char *socket_path = mail_user_plugin_getenv(dtxn->ptxn->muser, "xaps_socket");
-        if (socket_path == NULL) {
-            socket_path = "/var/run/dovecot/xapsd.sock";
-        }
-        if (xaps_notify(socket_path, dtxn->ptxn->muser, dtxn->ptxn->mbox) != 0) {
+        if (xaps_notify(dtxn->ptxn->muser, dtxn->ptxn->mbox) != 0) {
             i_error("cannot notify");
         }
     }
@@ -177,11 +174,15 @@ const char *xaps_plugin_dependencies[] = { "push_notification", NULL };
 
 extern struct push_notification_driver push_notification_driver_xaps;
 
-int xaps_plugin_init(struct push_notification_driver_config *module ATTR_UNUSED,
-                 struct mail_user *pUser ATTR_UNUSED,
+int xaps_plugin_init(struct push_notification_driver_config *dconfig ATTR_UNUSED,
+                 struct mail_user *muser,
                  pool_t pPool ATTR_UNUSED,
                  void **pVoid ATTR_UNUSED,
                  const char **pString ATTR_UNUSED) {
+    socket_path = mail_user_plugin_getenv(muser, "xaps_socket");
+    if (socket_path == NULL) {
+        socket_path = DEFAULT_SOCKPATH;
+    }
     return 0;
 }
 

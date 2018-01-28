@@ -29,6 +29,7 @@
 struct module;
 
 extern const char *xaps_plugin_dependencies[];
+const char *socket_path;
 
 void push_notification_xaps_plugin_init(struct module *module);
 void push_notification_xaps_plugin_deinit(void);
