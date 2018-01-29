@@ -34,7 +34,7 @@
 #include <strescape.h>
 #include <mail-storage-private.h>
 
-#include "xaps.h"
+#include "xaps-daemon.h"
 
 
 /*
