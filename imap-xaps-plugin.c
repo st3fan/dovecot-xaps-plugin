@@ -29,7 +29,7 @@
 #include <imap-common.h>
 
 #include "imap-xaps-plugin.h"
-#include "xaps.h"
+#include "xaps-daemon.h"
 
 const char *xapplepushservice_plugin_version = DOVECOT_ABI_VERSION;
 

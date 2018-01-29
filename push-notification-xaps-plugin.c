@@ -35,7 +35,7 @@
 #include <push-notification-txn-mbox.h>
 
 #include "push-notification-xaps-plugin.h"
-#include "xaps.h"
+#include "xaps-daemon.h"
 
 const char *xaps_plugin_version = DOVECOT_ABI_VERSION;
 
