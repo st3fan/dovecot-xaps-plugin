@@ -23,8 +23,8 @@
  * THE SOFTWARE.
  */
 
-#ifndef XAPS_PLUGIN_H
-#define XAPS_PLUGIN_H
+#ifndef PUSH_NOTIFICATION_XAPS_PLUGIN_H
+#define PUSH_NOTIFICATION_XAPS_PLUGIN_H
 
 struct module;
 

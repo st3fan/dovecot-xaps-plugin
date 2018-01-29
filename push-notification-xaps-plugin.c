@@ -25,103 +25,19 @@
 
 #include <config.h>
 #include <lib.h>
-#include <ostream.h>
-#include <ostream-unix.h>
-#include <net.h>
 #include <push-notification-drivers.h>
 #include <push-notification-events.h>
 #include <push-notification-txn-msg.h>
 #include <push-notification-event-messagenew.h>
-
 #include <str.h>
-#include <strescape.h>
 #include <mail-storage.h>
 #include <mail-storage-private.h>
 #include <push-notification-txn-mbox.h>
 
 #include "push-notification-xaps-plugin.h"
-
-#define XAPS_LOG_LABEL "XAPS Push Notification: "
-#define DEFAULT_SOCKPATH "/var/run/dovecot/xapsd.sock"
+#include "xaps.h"
 
 const char *xaps_plugin_version = DOVECOT_ABI_VERSION;
-
-/**
- * Quote and escape a string. Not sure if this deals correctly with
- * unicode in mailbox names.
- */
-
-static void xaps_str_append_quoted(string_t *dest, const char *str) {
-    str_append_c(dest, '"');
-    str_append(dest, str_escape(str));
-    str_append_c(dest, '"');
-}
-
-/**
- * Notify the backend daemon of an incoming mail. Right now we tell
- * the daemon the username and the mailbox in which a new email was
- * posted. The daemon can then lookup the user and see if any of the
- * devices want to receive a notification for that mailbox.
- */
-
-static int xaps_notify(struct mail_user *mailuser, struct mailbox *mailbox) {
-    int ret = -1;
-
-    /*
-     * Construct the request.
-     */
-
-    string_t *req = t_str_new(1024);
-    str_append(req, "NOTIFY");
-    str_append(req, " dovecot-username=");
-    xaps_str_append_quoted(req, mailuser->username);
-    str_append(req, "\tdovecot-mailbox=");
-    xaps_str_append_quoted(req, mailbox->name);
-    str_append(req, "\r\n");
-
-    /*
-     * Send the request to our daemon over a unix domain socket. The
-     * protocol is very simple line based. We use an alarm to make sure
-     * this request does not hang.
-     */
-
-    int fd = net_connect_unix(socket_path);
-    if (fd == -1) {
-        i_error("net_connect_unix(%s) failed: %m", socket_path);
-        return -1;
-    }
-
-    net_set_nonblock(fd, FALSE);
-    push_notification_driver_debug(XAPS_LOG_LABEL, mailuser, "about to send: %p", req);
-    alarm(1);                     /* TODO: Should be a constant. What is a good duration? */
-    struct ostream *ostream = o_stream_create_unix(fd, (size_t)-1);
-    o_stream_cork(ostream);
-    o_stream_nsend(ostream, str_data(req), str_len(req));
-    o_stream_uncork(ostream);
-    {
-        if (o_stream_flush(ostream) < 1) {
-            i_error("write(%s) failed: %m", socket_path);
-            ret = -1;
-        } else {
-            char res[1024];
-            ret = net_receive(fd, res, sizeof(res) - 1);
-            if (ret < 0) {
-                i_error("read(%s) failed: %m", socket_path);
-            } else {
-                res[ret] = '\0';
-                if (strncmp(res, "OK ", 3) == 0) {
-                    ret = 0;
-                }
-            }
-        }
-    }
-    o_stream_destroy(&ostream);
-    alarm(0);
-
-    net_disconnect(fd);
-
-    return ret;
-}
 
 /*
  * Prepare message handling.
@@ -171,7 +87,7 @@ static void xaps_plugin_process_msg(struct push_notification_driver_txn *dtxn, s
     // for now we only handle new messages and no flags
     messagenew = push_notification_txn_msg_get_eventdata(msg, "MessageNew");
     if (messagenew != NULL) {
-        if (xaps_notify(dtxn->ptxn->muser, dtxn->ptxn->mbox) != 0) {
+        if (xaps_notify(socket_path, dtxn->ptxn->muser, dtxn->ptxn->mbox) != 0) {
             i_error("cannot notify");
         }
     }

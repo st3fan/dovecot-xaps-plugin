@@ -23,16 +23,26 @@
  * THE SOFTWARE.
  */
 
-#ifndef IMAP_XAPS_PLUGIN_H
-#define IMAP_XAPS_PLUGIN_H
+#include <lib.h>
+#include <str.h>
 
-struct module;
+#ifndef DOVECOT_XAPS_PLUGIN_XAPS_H
+#define DOVECOT_XAPS_PLUGIN_XAPS_H
 
-extern const char imap_xaps_plugin_binary_dependency[];
-const char *socket_path;
+#define XAPS_LOG_LABEL "XAPS Push Notification: "
+#define DEFAULT_SOCKPATH "/var/run/dovecot/xapsd.sock"
 
-void imap_xaps_plugin_init(struct module *module);
+struct xaps_attr {
+    const char *aps_version, *aps_account_id, *aps_device_token, *aps_subtopic;
+    const struct imap_arg *mailboxes;
+    const char *dovecot_username;
+    string_t *aps_topic;
+};
 
-void imap_xaps_plugin_deinit(void);
+int send_to_deamon(const char *socket_path, const string_t *payload, struct xaps_attr *xaps_attr);
+
+int xaps_notify(const char *socket_path, struct mail_user *mailuser, struct mailbox *mailbox);
+
+int xaps_register(const char *socket_path, struct xaps_attr *xaps_attr);
 
 #endif
