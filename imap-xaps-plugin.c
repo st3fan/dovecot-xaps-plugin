@@ -25,131 +25,16 @@
 
 #include <config.h>
 #include <lib.h>
-#include <ostream.h>
-#include <ostream-unix.h>
+#include <str.h>
+#include <imap-common.h>
 
-#include "str.h"
-#include "strescape.h"
-#include "imap-common.h"
-#include "mail-storage-private.h"
+#include "imap-xaps-plugin.h"
+#include "xaps.h"
 
-
-#ifdef DOVECOT_ABI_VERSION
 const char *xapplepushservice_plugin_version = DOVECOT_ABI_VERSION;
-#else
-const char *xapplepushservice_plugin_version = DOVECOT_VERSION;
-#endif
-
 
 static struct module *imap_xaps_module;
 static imap_client_created_func_t *next_hook_client_created;
-
-
-/**
- * Quote and escape a string. Not sure if this deals correctly with
- * unicode in mailbox names.
- */
-
-static void xaps_str_append_quoted(string_t *dest, const char *str) {
-    str_append_c(dest, '"');
-    str_append(dest, str_escape(str));
-    str_append_c(dest, '"');
-}
-
-
-/**
- * Send a registration request to the daemon, which will do all the
- * hard work.
- */
-
-static int xaps_register(const char *socket_path, const char *aps_account_id, const char *aps_device_token,
-                         const char *aps_subtopic, const char *dovecot_username,
-                         const struct imap_arg *dovecot_mailboxes, string_t *aps_topic) {
-    int ret = -1;
-
-    /*
-     * Construct our request.
-     */
-
-    string_t *req = t_str_new(1024);
-    str_append(req, "REGISTER");
-    str_append(req, " aps-account-id=");
-    xaps_str_append_quoted(req, aps_account_id);
-    str_append(req, "\taps-device-token=");
-    xaps_str_append_quoted(req, aps_device_token);
-    str_append(req, "\taps-subtopic=");
-    xaps_str_append_quoted(req, aps_subtopic);
-    str_append(req, "\tdovecot-username=");
-    xaps_str_append_quoted(req, dovecot_username);
-    str_append(req, "");
-
-    if (dovecot_mailboxes == NULL) {
-        str_append(req, "\tdovecot-mailboxes=(\"INBOX\")");
-    } else {
-        str_append(req, "\tdovecot-mailboxes=(");
-        int next = 0;
-        for (; !IMAP_ARG_IS_EOL(dovecot_mailboxes); dovecot_mailboxes++) {
-            const char *mailbox;
-            if (!imap_arg_get_astring(&dovecot_mailboxes[0], &mailbox)) {
-                return -1;
-            }
-            if (next) {
-                str_append(req, ",");
-            }
-            xaps_str_append_quoted(req, mailbox);
-            next = 1;
-        }
-        str_append(req, ")");
-    }
-    str_append(req, "\r\n");
-
-    /*
-     * Send the request to our daemon over a unix domain socket. The
-     * protocol is very simple line based. We use an alarm to make sure
-     * this request does not hang.
-     */
-
-    int fd = net_connect_unix(socket_path);
-    if (fd == -1) {
-        i_error("net_connect_unix(%s) failed: %m", socket_path);
-        return -1;
-    }
-
-    net_set_nonblock(fd, FALSE);
-
-    alarm(2);
-    struct ostream *ostream = o_stream_create_unix(fd, (size_t)-1);
-    o_stream_cork(ostream);
-    o_stream_nsend(ostream, str_data(req), str_len(req));
-    o_stream_uncork(ostream);
-    {
-        if (o_stream_flush(ostream) < 1) {
-            i_error("write(%s) failed: %m", socket_path);
-            ret = -1;
-        } else {
-            char res[1024];
-            ret = net_receive(fd, res, sizeof(res) - 1);
-            if (ret < 0) {
-                i_error("read(%s) failed: %m", socket_path);
-            } else {
-                res[ret] = '\0';
-                if (strncmp(res, "OK ", 3) == 0) {
-                    char *tmp;
-                    /* Remove whitespace the end. We expect \r\n. TODO: Looks shady. Is there a dovecot library function for this? */
-                    str_append(aps_topic, strtok_r(&res[3], "\r\n", &tmp));
-                    ret = 0;
-                }
-            }
-        }
-    }
-    o_stream_destroy(&ostream);
-    alarm(0);
-
-    net_disconnect(fd);
-
-    return ret;
-}
-
 
 /**
  * Command handler for the XAPPLEPUSHSERVICE command. The command is
@@ -175,44 +60,47 @@ static int xaps_register(const char *socket_path, const char *aps_account_id, co
  * of this to the supporting daemon that will record the mapping
  * between the account and the iOS client.
  */
-
-static bool cmd_xapplepushservice(struct client_command_context *cmd) {
+static bool parse_xapplepush(struct client_command_context *cmd, struct xaps_attr *xaps_attr) {
     /*
-     * Parse arguments. We expect four key value pairs. We only take
-     * those that we understand for version 2 of this extension.
-     *
-     * TODO: We are ignoring the mailboxes parameter for now and just
-     * default to INBOX always.
-     */
+    * Parse arguments. We expect four key value pairs. We only take
+    * those that we understand for version 2 of this extension.
+    */
 
     const struct imap_arg *args;
     const char *arg_key, *arg_val;
-    const char *aps_version = NULL, *aps_account_id = NULL, *aps_device_token = NULL, *aps_subtopic = NULL;
+
+    xaps_attr->dovecot_username = cmd->client->user->username;
 
     if (!client_read_args(cmd, 0, 0, &args)) {
         client_send_command_error(cmd, "Invalid arguments.");
         return FALSE;
     }
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         if (!imap_arg_get_astring(&args[i * 2 + 0], &arg_key)) {
             client_send_command_error(cmd, "Invalid arguments.");
             return FALSE;
         }
 
-        if (!imap_arg_get_astring(&args[i * 2 + 1], &arg_val)) {
+        // i=4 is a list with which imap_arg_get_astring segfaults
+        if (i < 4 && !imap_arg_get_astring(&args[i * 2 + 1], &arg_val)) {
             client_send_command_error(cmd, "Invalid arguments.");
             return FALSE;
         }
 
         if (strcasecmp(arg_key, "aps-version") == 0) {
-            aps_version = arg_val;
+            xaps_attr->aps_version = arg_val;
         } else if (strcasecmp(arg_key, "aps-account-id") == 0) {
-            aps_account_id = arg_val;
+            xaps_attr->aps_account_id = arg_val;
         } else if (strcasecmp(arg_key, "aps-device-token") == 0) {
-            aps_device_token = arg_val;
+            xaps_attr->aps_device_token = arg_val;
         } else if (strcasecmp(arg_key, "aps-subtopic") == 0) {
-            aps_subtopic = arg_val;
+            xaps_attr->aps_subtopic = arg_val;
+        } else if (strcasecmp(arg_key, "mailboxes") == 0) {
+            if (!imap_arg_get_list(&args[i * 2 + 1], &(xaps_attr->mailboxes))) {
+                client_send_command_error(cmd, "Invalid arguments.");
+                return FALSE;
+            }
         }
     }
 
@@ -220,73 +108,49 @@ static bool cmd_xapplepushservice(struct client_command_context *cmd) {
      * Check if this is a version we expect
      */
 
-    if (!aps_version || (strcmp(aps_version, "1") != 0 && strcmp(aps_version, "2") != 0)) {
+    if (!xaps_attr->aps_version || strcmp(xaps_attr->aps_version, "2") != 0) {
         client_send_command_error(cmd, "Unknown aps-version.");
         return FALSE;
-    }
-
-    /*
-     * If this is version 2 then also need to grab the mailboxes, which
-     * is a list of mailbox names.
-     */
-
-    const struct imap_arg *mailboxes = NULL;
-
-    if (strcmp(aps_version, "2") == 0) {
-        if (!imap_arg_get_astring(&args[8], &arg_key)) {
-            client_send_command_error(cmd, "Invalid arguments.");
-            return FALSE;
-        }
-
-        if (strcmp(arg_key, "mailboxes") != 0) {
-            client_send_command_error(cmd, "Invalid arguments. (Expected mailboxes)");
-            return FALSE;
-        }
-
-        if (!imap_arg_get_list(&args[9], &mailboxes)) {
-            client_send_command_error(cmd, "Invalid arguments.");
-            return FALSE;
-        }
     }
 
     /*
      * Check if all of the parameters are there.
      */
 
-    if (!aps_account_id || strlen(aps_account_id) == 0) {
+    if (!xaps_attr->aps_account_id || strlen(xaps_attr->aps_account_id) == 0) {
         client_send_command_error(cmd, "Incomplete or empty aps-account-id parameter.");
         return FALSE;
     }
 
-    if (!aps_device_token || strlen(aps_device_token) == 0) {
+    if (!xaps_attr->aps_device_token || strlen(xaps_attr->aps_device_token) == 0) {
         client_send_command_error(cmd, "Incomplete or empty aps-device-token parameter.");
         return FALSE;
     }
 
-    if (!aps_subtopic || strlen(aps_subtopic) == 0) {
+    if (!xaps_attr->aps_subtopic || strlen(xaps_attr->aps_subtopic) == 0) {
         client_send_command_error(cmd, "Incomplete or empty aps-subtopic parameter.");
         return FALSE;
     }
 
-    /*
-     * Forward to the helper daemon. The helper will return the
-     * aps-topic, which in reality is the subject of the certificate. I
-     * think it is only used to make sure that the binding between the
-     * client and the APS server and the IMAP server stays current.
-     */
-
-    struct client *client = cmd->client;
-    struct mail_user *user = client->user;
-
-    const char *socket_path = mail_user_plugin_getenv(user, "xaps_socket");
-    if (socket_path == NULL) {
-        socket_path = "/var/run/dovecot/xapsd.sock";
+    if(!xaps_attr->mailboxes) {
+        client_send_command_error(cmd, "Incomplete or empty mailboxes parameter.");
+        return FALSE;
     }
 
-    string_t *aps_topic = t_str_new(0);
+    return TRUE;
+}
 
-    if (xaps_register(socket_path, aps_account_id, aps_device_token, aps_subtopic, user->username, mailboxes,
-                      aps_topic) != 0) {
+/*
+ * Register the client at the xapsd
+ */
+static bool register_client(struct client_command_context *cmd, struct xaps_attr *xaps_attr) {
+    /*
+    * Forward to the helper daemon. The helper will return the
+    * aps-topic, which in reality is the subject of the certificate.
+    */
+    xaps_attr->aps_topic = t_str_new(0);
+
+    if (xaps_register(socket_path, xaps_attr) != 0) {
         client_send_command_error(cmd, "Registration failed.");
         return FALSE;
     }
@@ -297,13 +161,26 @@ static bool cmd_xapplepushservice(struct client_command_context *cmd) {
      */
 
     client_send_line(cmd->client,
-                     t_strdup_printf("* XAPPLEPUSHSERVICE aps-version \"%s\" aps-topic \"%s\"", aps_version,
-                                     str_c(aps_topic)));
+                     t_strdup_printf("* XAPPLEPUSHSERVICE aps-version \"%s\" aps-topic \"%s\"", xaps_attr->aps_version,
+                                     str_c(xaps_attr->aps_topic)));
     client_send_tagline(cmd, "OK XAPPLEPUSHSERVICE Registration successful.");
-
     return TRUE;
 }
 
+/*
+ * Handle any XAPPLEPUSHSERVICE command
+ */
+static bool cmd_xapplepushservice(struct client_command_context *cmd) {
+    struct xaps_attr xaps_attr;
+
+    if (!parse_xapplepush(cmd, &xaps_attr)) {
+        return FALSE;
+    }
+    if (!register_client(cmd, &xaps_attr)) {
+        return FALSE;
+    }
+    return TRUE;
+}
 
 /**
  * This hook is called when a client has connected but before the
@@ -315,6 +192,10 @@ static bool cmd_xapplepushservice(struct client_command_context *cmd) {
 static void xaps_client_created(struct client **client) {
     if (mail_user_is_plugin_loaded((*client)->user, imap_xaps_module)) {
         str_append((*client)->capability_string, " XAPPLEPUSHSERVICE");
+    }
+    socket_path = mail_user_plugin_getenv((*client)->user, "xaps_socket");
+    if (socket_path == NULL) {
+        socket_path = DEFAULT_SOCKPATH;
     }
 
     if (next_hook_client_created != NULL) {
