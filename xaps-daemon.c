@@ -26,8 +26,10 @@
 #include <config.h>
 #include <lib.h>
 #include <net.h>
+#if (DOVECOT_VERSION_MINOR >= 3u)
 #include <ostream-unix.h>
 #include <ostream.h>
+#endif
 #include <unistd.h>
 #include <push-notification-drivers.h>
 #include <imap-arg.h>
@@ -53,12 +55,17 @@ int send_to_deamon(const char *socket_path, const string_t *payload, struct xaps
 
     net_set_nonblock(fd, FALSE);
     alarm(1);                     /* TODO: Should be a constant. What is a good duration? */
+#ifdef OSTREAM_UNIX_H
     struct ostream *ostream = o_stream_create_unix(fd, (size_t)-1);
     o_stream_cork(ostream);
     o_stream_nsend(ostream, str_data(payload), str_len(payload));
     o_stream_uncork(ostream);
     {
         if (o_stream_flush(ostream) < 1) {
+#else
+    {
+        if (net_transmit(fd, str_data(payload), str_len(payload)) < 0) {
+#endif
             i_error("write(%s) failed: %m", socket_path);
             ret = -1;
         } else {
@@ -79,7 +86,9 @@ int send_to_deamon(const char *socket_path, const string_t *payload, struct xaps
             }
         }
     }
+#ifdef OSTREAM_UNIX_H
     o_stream_destroy(&ostream);
+#endif
     alarm(0);
 
     net_disconnect(fd);
