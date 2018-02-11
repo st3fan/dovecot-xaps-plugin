@@ -74,7 +74,6 @@ static bool xaps_plugin_begin_txn(struct push_notification_driver_txn *dtxn) {
  * Process the actual message
  */
 static void xaps_plugin_process_msg(struct push_notification_driver_txn *dtxn, struct push_notification_txn_msg *msg) {
-    struct push_notification_event_messagenew_data *messagenew;
     struct push_notification_txn_event *const *event;
 
     if (array_is_created(&msg->eventdata)) {
@@ -83,13 +82,8 @@ static void xaps_plugin_process_msg(struct push_notification_driver_txn *dtxn, s
                                            "Handling event: %s", (*event)->event->event->name);
         }
     }
-
-    // for now we only handle new messages and no flags
-    messagenew = push_notification_txn_msg_get_eventdata(msg, "MessageNew");
-    if (messagenew != NULL) {
-        if (xaps_notify(socket_path, dtxn->ptxn->muser, dtxn->ptxn->mbox) != 0) {
-            i_error("cannot notify");
-        }
+    if (xaps_notify(socket_path, dtxn->ptxn->muser, dtxn->ptxn->mbox, msg) != 0) {
+        i_error("cannot notify");
     }
 }
 
