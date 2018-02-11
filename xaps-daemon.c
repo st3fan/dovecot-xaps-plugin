@@ -35,6 +35,7 @@
 #include <imap-arg.h>
 #include <strescape.h>
 #include <mail-storage-private.h>
+#include <push-notification-txn-msg.h>
 
 #include "xaps-daemon.h"
 
@@ -113,7 +114,8 @@ static void xaps_str_append_quoted(string_t *dest, const char *str) {
  * devices want to receive a notification for that mailbox.
  */
 
-int xaps_notify(const char *socket_path, struct mail_user *mailuser, struct mailbox *mailbox) {
+int xaps_notify(const char *socket_path, struct mail_user *mailuser, struct mailbox *mailbox, struct push_notification_txn_msg *msg) {
+    struct push_notification_txn_event *const *event;
     /*
      * Construct the request.
      */
@@ -123,6 +125,21 @@ int xaps_notify(const char *socket_path, struct mail_user *mailuser, struct mail
     xaps_str_append_quoted(req, mailuser->username);
     str_append(req, "\tdovecot-mailbox=");
     xaps_str_append_quoted(req, mailbox->name);
+    if (array_is_created(&msg->eventdata)) {
+        str_append(req, "\tevents=(");
+        int count = 0;
+        array_foreach(&msg->eventdata, event) {
+            if (count) {
+                str_append(req, ",");
+            }
+            str_append(req, "\"");
+            str_append(req, (*event)->event->event->name);
+            str_append(req, "\"");
+            count++;
+        }
+        str_append(req, ")");
+
+    }
     str_append(req, "\r\n");
 
 

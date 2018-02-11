@@ -29,6 +29,7 @@
 #include <push-notification-events.h>
 #include <push-notification-txn-msg.h>
 #include <push-notification-event-messagenew.h>
+#include <push-notification-event-messageappend.h>
 #include <str.h>
 #include <mail-storage.h>
 #include <mail-storage-private.h>
@@ -45,7 +46,8 @@ const char *xaps_plugin_version = DOVECOT_ABI_VERSION;
  */
 static bool xaps_plugin_begin_txn(struct push_notification_driver_txn *dtxn) {
     const struct push_notification_event *const *event;
-    struct push_notification_event_messagenew_config *config;
+    struct push_notification_event_messagenew_config *eventMessagenewConfig;
+    struct push_notification_event_messageappend_config *eventMessageappendConfig;
 
     push_notification_driver_debug(XAPS_LOG_LABEL, dtxn->ptxn->muser, "begin_txn: user: %s mailbox: %s",
                                    dtxn->ptxn->muser->username, dtxn->ptxn->mbox->name);
@@ -55,14 +57,23 @@ static bool xaps_plugin_begin_txn(struct push_notification_driver_txn *dtxn) {
     // so it's handled separately
     array_foreach(&push_notification_events, event) {
         if (strcmp((*event)->name,"MessageNew") == 0) {
-            config = p_new(dtxn->ptxn->pool, struct push_notification_event_messagenew_config, 1);
+            eventMessagenewConfig = p_new(dtxn->ptxn->pool, struct push_notification_event_messagenew_config, 1);
             // Take what you can, give nothing back
-            config->flags = PUSH_NOTIFICATION_MESSAGE_HDR_DATE |
+            eventMessagenewConfig->flags = PUSH_NOTIFICATION_MESSAGE_HDR_DATE |
                             PUSH_NOTIFICATION_MESSAGE_HDR_FROM |
                             PUSH_NOTIFICATION_MESSAGE_HDR_TO |
                             PUSH_NOTIFICATION_MESSAGE_HDR_SUBJECT |
                             PUSH_NOTIFICATION_MESSAGE_BODY_SNIPPET;
-            push_notification_event_init(dtxn, "MessageNew", config);
+            push_notification_event_init(dtxn, "MessageNew", eventMessagenewConfig);
+        } else if (strcmp((*event)->name,"MessageAppend") == 0) {
+            eventMessageappendConfig = p_new(dtxn->ptxn->pool, struct push_notification_event_messageappend_config, 1);
+            // Take what you can, give nothing back
+            eventMessageappendConfig->flags = PUSH_NOTIFICATION_MESSAGE_HDR_DATE |
+                            PUSH_NOTIFICATION_MESSAGE_HDR_FROM |
+                            PUSH_NOTIFICATION_MESSAGE_HDR_TO |
+                            PUSH_NOTIFICATION_MESSAGE_HDR_SUBJECT |
+                            PUSH_NOTIFICATION_MESSAGE_BODY_SNIPPET;
+            push_notification_event_init(dtxn, "MessageAppend", eventMessageappendConfig);
         } else {
             push_notification_event_init(dtxn, (*event)->name, NULL);
         }
@@ -74,7 +85,6 @@ static bool xaps_plugin_begin_txn(struct push_notification_driver_txn *dtxn) {
  * Process the actual message
  */
 static void xaps_plugin_process_msg(struct push_notification_driver_txn *dtxn, struct push_notification_txn_msg *msg) {
-    struct push_notification_event_messagenew_data *messagenew;
     struct push_notification_txn_event *const *event;
 
     if (array_is_created(&msg->eventdata)) {
@@ -83,13 +93,8 @@ static void xaps_plugin_process_msg(struct push_notification_driver_txn *dtxn, s
                                            "Handling event: %s", (*event)->event->event->name);
         }
     }
-
-    // for now we only handle new messages and no flags
-    messagenew = push_notification_txn_msg_get_eventdata(msg, "MessageNew");
-    if (messagenew != NULL) {
-        if (xaps_notify(socket_path, dtxn->ptxn->muser, dtxn->ptxn->mbox) != 0) {
-            i_error("cannot notify");
-        }
+    if (xaps_notify(socket_path, dtxn->ptxn->muser, dtxn->ptxn->mbox, msg) != 0) {
+        i_error("cannot notify");
     }
 }
 
