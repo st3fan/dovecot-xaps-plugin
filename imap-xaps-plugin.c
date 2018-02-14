@@ -45,8 +45,8 @@ static imap_client_created_func_t *next_hook_client_created;
  *
  *  aps-version      - always set to "2"
  *  aps-account-id   - a unique id the iOS device has associated with this account
- *  api-device-token - the APS device token
- *  api-subtopic     - always set to "com.apple.mobilemail"
+ *  aps-device-token - the APS device token
+ *  aps-subtopic     - always set to "com.apple.mobilemail"
  *  mailboxes        - list of mailboxes to send notifications for
  *
  * For example:
