@@ -28,12 +28,12 @@
 #include <str.h>
 #include <imap-common.h>
 
-#include "imap-xaps-plugin.h"
+#include "xaps-imap-plugin.h"
 #include "xaps-daemon.h"
 
 const char *xapplepushservice_plugin_version = DOVECOT_ABI_VERSION;
 
-static struct module *imap_xaps_module;
+static struct module *xaps_imap_module;
 static imap_client_created_func_t *next_hook_client_created;
 
 /**
@@ -190,7 +190,7 @@ static bool cmd_xapplepushservice(struct client_command_context *cmd) {
  */
 
 static void xaps_client_created(struct client **client) {
-    if (mail_user_is_plugin_loaded((*client)->user, imap_xaps_module)) {
+    if (mail_user_is_plugin_loaded((*client)->user, xaps_imap_module)) {
         str_append((*client)->capability_string, " XAPPLEPUSHSERVICE");
     }
     socket_path = mail_user_plugin_getenv((*client)->user, "xaps_socket");
@@ -211,10 +211,10 @@ static void xaps_client_created(struct client **client) {
  * capabilities string.
  */
 
-void imap_xaps_plugin_init(struct module *module) {
+void xaps_imap_plugin_init(struct module *module) {
     command_register("XAPPLEPUSHSERVICE", cmd_xapplepushservice, 0);
 
-    imap_xaps_module = module;
+    xaps_imap_module = module;
     next_hook_client_created = imap_client_created_hook_set(xaps_client_created);
 }
 
@@ -225,7 +225,7 @@ void imap_xaps_plugin_init(struct module *module) {
  * client_created hook.
  */
 
-void imap_xaps_plugin_deinit(void) {
+void xaps_imap_plugin_deinit(void) {
     imap_client_created_hook_set(next_hook_client_created);
 
     command_unregister("XAPPLEPUSHSERVICE");
@@ -236,4 +236,4 @@ void imap_xaps_plugin_deinit(void) {
  * This plugin only makes sense in the context of IMAP.
  */
 
-const char imap_xaps_plugin_binary_dependency[] = "imap";
+const char xaps_imap_plugin_binary_dependency[] = "imap";

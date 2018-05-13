@@ -23,15 +23,16 @@
  * THE SOFTWARE.
  */
 
-#ifndef PUSH_NOTIFICATION_XAPS_PLUGIN_H
-#define PUSH_NOTIFICATION_XAPS_PLUGIN_H
+#ifndef XAPS_IMAP_PLUGIN_H
+#define XAPS_IMAP_PLUGIN_H
 
 struct module;
 
-extern const char *xaps_plugin_dependencies[];
+extern const char xaps_imap_plugin_binary_dependency[];
 const char *socket_path;
 
-void push_notification_xaps_plugin_init(struct module *module);
-void push_notification_xaps_plugin_deinit(void);
+void xaps_imap_plugin_init(struct module *module);
+
+void xaps_imap_plugin_deinit(void);
 
 #endif
