@@ -35,7 +35,7 @@
 #include <mail-storage-private.h>
 #include <push-notification-txn-mbox.h>
 
-#include "push-notification-xaps-plugin.h"
+#include "xaps-push-notification-plugin.h"
 #include "xaps-daemon.h"
 
 const char *xaps_plugin_version = DOVECOT_ABI_VERSION;
@@ -131,10 +131,10 @@ struct push_notification_driver push_notification_driver_xaps = {
 
 // plugin init and deinit
 
-void push_notification_xaps_plugin_init(struct module *module ATTR_UNUSED) {
+void xaps_push_notification_plugin_init(struct module *module ATTR_UNUSED) {
     push_notification_driver_register(&push_notification_driver_xaps);
 }
 
-void push_notification_xaps_plugin_deinit(void) {
+void xaps_push_notification_plugin_deinit(void) {
     push_notification_driver_unregister(&push_notification_driver_xaps);
 }
