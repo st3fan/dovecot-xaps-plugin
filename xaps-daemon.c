@@ -114,7 +114,7 @@ static void xaps_str_append_quoted(string_t *dest, const char *str) {
  * devices want to receive a notification for that mailbox.
  */
 
-int xaps_notify(const char *socket_path, struct mail_user *mailuser, struct mailbox *mailbox, struct push_notification_txn_msg *msg) {
+int xaps_notify(const char *socket_path, const char *username, struct mail_user *mailuser , struct mailbox *mailbox, struct push_notification_txn_msg *msg) {
     struct push_notification_txn_event *const *event;
     /*
      * Construct the request.
@@ -122,7 +122,7 @@ int xaps_notify(const char *socket_path, struct mail_user *mailuser, struct mail
     string_t *req = t_str_new(1024);
     str_append(req, "NOTIFY");
     str_append(req, " dovecot-username=");
-    xaps_str_append_quoted(req, mailuser->username);
+    xaps_str_append_quoted(req, username);
     str_append(req, "\tdovecot-mailbox=");
     xaps_str_append_quoted(req, mailbox->name);
     if (array_is_created(&msg->eventdata)) {
