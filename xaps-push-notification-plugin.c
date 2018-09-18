@@ -93,7 +93,11 @@ static void xaps_plugin_process_msg(struct push_notification_driver_txn *dtxn, s
                                            "Handling event: %s", (*event)->event->event->name);
         }
     }
-    if (xaps_notify(socket_path, dtxn->ptxn->muser, dtxn->ptxn->mbox, msg) != 0) {
+    const char *username = dtxn->ptxn->muser->username;
+    if (user_lookup != NULL) {
+        username = mail_user_plugin_getenv(dtxn->ptxn->muser, user_lookup);
+    }
+    if (xaps_notify(socket_path, username, dtxn->ptxn->muser, dtxn->ptxn->mbox, msg) != 0) {
         i_error("cannot notify");
     }
 }
@@ -113,6 +117,7 @@ int xaps_plugin_init(struct push_notification_driver_config *dconfig ATTR_UNUSED
     if (socket_path == NULL) {
         socket_path = DEFAULT_SOCKPATH;
     }
+    user_lookup = mail_user_plugin_getenv(muser, "xaps_user_lookup");
     return 0;
 }
 
