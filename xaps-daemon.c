@@ -26,7 +26,7 @@
 #include <config.h>
 #include <lib.h>
 #include <net.h>
-#if (DOVECOT_VERSION_MINOR >= 3u)
+#if (DOVECOT_VERSION_MAJOR >= 2u || DOVECOT_VERSION_MINOR >= 3u)
 #include <ostream-unix.h>
 #include <ostream.h>
 #endif
