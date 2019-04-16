@@ -40,7 +40,7 @@ struct xaps_attr {
     string_t *aps_topic;
 };
 
-int send_to_deamon(const char *socket_path, const string_t *payload, struct xaps_attr *xaps_attr);
+int send_to_daemon(const char *socket_path, const string_t *payload, struct xaps_attr *xaps_attr);
 
 int xaps_notify(const char *socket_path, const char *username, struct mail_user *mailuser, struct mailbox *mailbox, struct push_notification_txn_msg *msg);
 

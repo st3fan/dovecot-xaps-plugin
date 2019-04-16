@@ -26,7 +26,7 @@
 #include <config.h>
 #include <lib.h>
 #include <net.h>
-#if (DOVECOT_VERSION_MAJOR >= 2u || DOVECOT_VERSION_MINOR >= 3u)
+#if (DOVECOT_VERSION_MAJOR > 2u || (DOVECOT_VERSION_MAJOR == 2u && DOVECOT_VERSION_MINOR >= 3u))
 #include <ostream-unix.h>
 #include <ostream.h>
 #endif
@@ -45,7 +45,7 @@
  * protocol is very simple line based. We use an alarm to make sure
  * this request does not hang.
  */
-int send_to_deamon(const char *socket_path, const string_t *payload, struct xaps_attr *xaps_attr) {
+int send_to_daemon(const char *socket_path, const string_t *payload, struct xaps_attr *xaps_attr) {
     int ret = -1;
 
     int fd = net_connect_unix(socket_path);
@@ -144,7 +144,7 @@ int xaps_notify(const char *socket_path, const char *username, struct mail_user 
 
 
     push_notification_driver_debug(XAPS_LOG_LABEL, mailuser, "about to send: %p", req);
-    return send_to_deamon(socket_path, req, NULL);
+    return send_to_daemon(socket_path, req, NULL);
 }
 
 /**
@@ -188,7 +188,7 @@ int xaps_register(const char *socket_path, struct xaps_attr *xaps_attr) {
     }
     str_append(req, "\r\n");
 
-    return send_to_deamon(socket_path, req, xaps_attr);
+    return send_to_daemon(socket_path, req, xaps_attr);
 }
 
 // copied from core: src/lib/strescape.c
@@ -208,7 +208,7 @@ const char *str_nescape(const void *str, size_t len)
 
     /* quote */
     ret = t_str_new((size_t)(p - s) + 128);
-    str_append_max(ret, s, (size_t)(p - s));
+    str_append_data(ret, s, (size_t)(p - s));
 
     for (; (size_t)(p - s) < len; p++) {
         if (IS_ESCAPED_CHAR(*p))
