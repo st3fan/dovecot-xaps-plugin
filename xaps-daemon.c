@@ -103,7 +103,7 @@ int send_to_daemon(const char *socket_path, const string_t *payload, struct xaps
 
 static void xaps_str_append_quoted(string_t *dest, const char *str) {
     str_append_c(dest, '"');
-    str_append(dest, str_nescape(str, strlen(str)));
+    str_append(dest, str_escape(str));
     str_append_c(dest, '"');
 }
 
@@ -189,31 +189,4 @@ int xaps_register(const char *socket_path, struct xaps_attr *xaps_attr) {
     str_append(req, "\r\n");
 
     return send_to_daemon(socket_path, req, xaps_attr);
-}
-
-// copied from core: src/lib/strescape.c
-// first version with change: 2.3.3
-const char *str_nescape(const void *str, size_t len)
-{
-    const unsigned char *s = str, *p = str;
-    string_t *ret;
-    /* see if we need to quote it */
-    for (p = str; (size_t)(p - s) < len; p++) {
-        if (IS_ESCAPED_CHAR(*p))
-            break;
-    }
-
-    if (p == (s + len))
-        return str;
-
-    /* quote */
-    ret = t_str_new((size_t)(p - s) + 128);
-    str_append_data(ret, s, (size_t)(p - s));
-
-    for (; (size_t)(p - s) < len; p++) {
-        if (IS_ESCAPED_CHAR(*p))
-            str_append_c(ret, '\\');
-        str_append_data(ret, p, 1);
-    }
-    return str_c(ret);
 }
